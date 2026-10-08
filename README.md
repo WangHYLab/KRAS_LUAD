@@ -1,8 +1,8 @@
 # Integrative analysis reveals immune heterogeneity and cancer-cell-intrinsic immune-related genes in KRAS-mutant lung adenocarcinoma
 
-Analysis code accompanying a study of the tumour immune microenvironment and tumour-cell programs associated with immune heterogeneity in KRAS-mutant lung adenocarcinoma (LUAD). The study identifies immune-hot and immune-cold subtypes and prioritizes PDE4D as a KRAS-responsive cancer-cell-intrinsic immune-related (CIIR) candidate associated with reduced infiltration across multiple immune-cell populations, alterations in cytokine-related transcriptional programs, and lower tumour-cell HLA-I expression.
+Analysis code accompanying a study of the tumour immune microenvironment and tumour-cell programs associated with immune heterogeneity in KRAS-mutant lung adenocarcinoma (LUAD). The study identifies immune-hot and immune-cold subtypes and prioritizes PDE4D as a KRAS-responsive cancer-cell-intrinsic immune-related (CIIR) candidate associated with reduced infiltration across multiple immune-cell populations, alterations in cytokine-related transcriptional programs, and reduced HLA-I-related expression.
 
-The analyses combine TCGA-LUAD bulk RNA-sequencing and mutation data, public single-cell RNA-sequencing datasets, KRAS-inhibitor perturbation datasets, DepMap cell-line data, and tissue immunohistochemistry (IHC) and event-free survival (EFS) analyses.
+The analyses combine TCGA-LUAD bulk RNA-sequencing and mutation data, public single-cell RNA-sequencing datasets, KRAS-inhibitor perturbation datasets, DepMap cell-line data, and tissue immunohistochemistry (IHC) data.
 
 **Publication status:** Manuscript under submission. Publication details and a DOI will be added when available.
 
@@ -32,26 +32,26 @@ Figure mappings follow comments in the current scripts and should be checked aga
 
 | Source | Role | Access / preparation |
 | --- | --- | --- |
-| TCGA-LUAD | Bulk expression and somatic mutations | [NCI Genomic Data Commons](https://portal.gdc.cancer.gov/); downloaded in **2024**, as confirmed by the author; queried with `TCGAbiolinks` in `1.get_data.R` |
+| TCGA-LUAD | Bulk expression and somatic mutations | [NCI Genomic Data Commons](https://portal.gdc.cancer.gov/); queried with `TCGAbiolinks` in `1.get_data.R` |
 | GSE136246, GSE123902, GSE146100, GSE148466, GSE149655 | Single-cell analysis | [NCBI GEO](https://www.ncbi.nlm.nih.gov/geo/); **22 KRAS-mutant samples** selected using the sample information provided in the GEO datasets; accession-specific input files are referenced in `2_2.scRNA_seq_analysis.R` |
 | GSE183516 | H358 ARS-1620, 24 h versus control, as selected in the script | [GEO record](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE183516); count matrix and gene annotation table |
-| GSE275534 | H358 adagrasib, 72 h versus control, as selected in the script | [GEO record](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE275534); featureCounts files |
-| DepMap / CCLE | KRAS-mutant LUAD cell-line expression and PDE4D grouping | [DepMap downloads](https://depmap.org/portal/download/), release **25Q3**, confirmed by the author; the LUAD/KRAS-mutant cell-line summary was assembled using the mutation information |
-| TIMER2.0 | Immune-infiltration estimates and KRAS-associated comparisons | [TIMER2.0](http://timer.cistrome.org/); analyses were performed during **2025–2026**. The estimation branch used an uploaded TPM matrix for **138 KRAS-mutant tumours**; mutation-associated comparisons used the built-in KRAS mutation query without uploading a custom matrix |
-| CIBERSORT signatures | Immune gene-set enrichment | CIBERSORT **LM22 immune cell signatures**; the marker table used by the scripts is `Tables/CIBERSORT_cell_types_markers.csv` |
-| ImmuCellAI signatures | Immune gene-set enrichment and ssGSEA subtyping | Immune-cell signatures provided by the **ImmuCellAI tool**; the supplied table is `Tables/ImmuCellAI_24_immune_cell_types_signature_genes.csv` |
+| GSE275534 | H358 MRTX849 (adagrasib), 72 h versus control, as selected in the script | [GEO record](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE275534); featureCounts files |
+| DepMap / CCLE | KRAS-mutant LUAD cell-line expression and PDE4D grouping | [DepMap downloads](https://depmap.org/portal/download/), release **25Q3**; the LUAD/KRAS-mutant cell-line summary was assembled using the mutation information |
+| TIMER2.0 | Immune-infiltration estimates and KRAS-associated comparisons | [TIMER2.0](http://timer.cistrome.org/); analyses were performed during **2025–2026**. Immune-infiltration estimation was performed using an uploaded TPM matrix for 138 KRAS-mutant tumours, whereas KRAS mutation-associated comparisons used the built-in mutation module without uploading a custom expression matrix |
+| CIBERSORT signatures | Immune gene-set enrichment | CIBERSORT **LM22 immune cell signatures**; the LM22-derived signature table used by the scripts is `Tables/CIBERSORT_cell_types_markers.csv` |
+| ImmuCellAI signatures | Immune gene-set enrichment and ssGSEA subtyping | Immune-cell signature genes derived from ImmuCellAI; the supplied table is `Tables/ImmuCellAI_24_immune_cell_types_signature_genes.csv` |
 | TCGA survival table | Survival comparison of immune subtypes | Downloaded from **UCSC Xena**; supplied as `Tables/survival_LUAD_survival.txt`. Overall-survival time (`OS.time`) is in **days**; `OS` is the event indicator |
 | Institutional IHC / clinical cohort | PDE4D–CD8⁺ T-cell associations and EFS analyses | Local source data are provided in the source-data workbook, sheet `Fig6b-d`, and `Results/integrated_data_49samples.csv`; the original input CSVs read by script `5` are not included |
 
 For the DepMap cancer cell lines analysis, a PDE4D expression cutoff of **2.985** on the **log2(TPM + 1)** scale, corresponding to a local minimum of the expression distribution, classified **16 cell lines as PDE4D-high** and **12 as PDE4D-low**. The script uses expression > cutoff for high and expression <= cutoff for low; all 28 labels in the supplied grouping table agree with this rule.
 
-The current TCGA sample metadata contain 502 tumours: 138 KRAS-mutant and 364 KRAS-wild-type. The KRAS-mutant subtype table contains 66 immune-cold and 72 immune-hot tumours. These counts describe the supplied metadata, rather than a guarantee that a new database query will return identical cohorts.
+The current TCGA sample metadata contain 502 tumours: 138 KRAS-mutant and 364 KRAS-wild-type. The KRAS-mutant subtype table contains 66 immune-cold and 72 immune-hot tumours. These counts reflect the supplied analysis metadata and may not be reproduced exactly by a new query of the source databases.
 
-The TCGA preprocessing script uses a manually curated mutation-barcode selection (`Results/mutedata_modified.csv`) and a fixed positional selection of duplicate expression barcodes. The supplied table and current code retain these selections; the original selection rationale is not recorded.
+The TCGA preprocessing script uses a manually curated mutation-barcode selection (Results/mutedata_modified.csv) and a fixed index-based selection among duplicate expression barcodes.
 
 ### Processed outputs
 
-See [Results/README.md](Results/README.md) for a file-by-file description of source datasets, generating scripts, grouping rules, and differential-expression contrasts.
+See [Results/README.md](Results/README.md) for a file-by-file description of processed datasets and result tables, generating scripts, grouping rules, and differential-expression contrasts.
 
 ### Clinical data
 
@@ -61,7 +61,7 @@ The manuscript uses this independent IHC cohort of **49 KRAS-mutant LUAD specime
 
 ## Software environment
 
-The author reports that most analyses used **R 4.3.1**. **Some scripts may require older versions of R or their dependent packages**, particularly the immune-hot/immune-cold clustering, which used an older `pheatmap` version.
+The author reports that most analyses used **R 4.3.1**. **Some scripts may require older versions of R or specific package versions**, particularly the immune-hot/immune-cold clustering, for which the original analysis used an older `pheatmap` installation.
 
 Package references observed in the scripts include:
 
@@ -74,9 +74,7 @@ Package references observed in the scripts include:
 | Data processing | `tidyverse`, `dplyr`, `tidyr`, `tibble`, `readr`, `purrr`, `stringr`, `reshape2`, `openxlsx`, `mgcv` |
 | Plotting and survival | `ggplot2`, `ggpubr`, `ggrepel`, `pheatmap`, `ComplexHeatmap`, `patchwork`, `gridExtra`, `viridis`, `survival`, `survminer` |
 
-Use the original analysis environment where possible. Some scripts use older function interfaces, including the legacy `GSVA::gsva()` call, and saved objects can depend on package versions. Install dependencies using their official distribution sources and use compatible versions where needed.
-
-The reported analysis environment has not been independently rerun during repository preparation.
+Use the original analysis environment where possible. Some scripts use legacy package interfaces, including the earlier `GSVA::gsva()` syntax, and serialized R objects may also depend on package versions. Install dependencies using their official distribution sources and use compatible versions where needed.
 
 ## Citation and contact
 
