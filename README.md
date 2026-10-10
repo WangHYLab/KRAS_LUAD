@@ -125,5 +125,3 @@ Use the original analysis environment where available. Serialized R objects may 
 ## Citation and contact
 
 Please cite the associated manuscript when publicly available, together with the original datasets/methods when using these analyses.
-
-**Manuscript:** *Integrative analysis reveals immune heterogeneity and cancer-cell-intrinsic immune-related genes in KRAS-mutant lung adenocarcinoma*. Under submission; author and publication details will be added later.
