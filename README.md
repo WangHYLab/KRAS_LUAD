@@ -4,8 +4,6 @@ Analysis code accompanying a study of the tumour immune microenvironment and tum
 
 The analyses combine TCGA-LUAD bulk RNA-sequencing and mutation data, public single-cell RNA-sequencing datasets, KRAS-inhibitor perturbation datasets, DepMap cell-line data, and tissue immunohistochemistry (IHC) data.
 
-**Publication status:** Manuscript under submission. Publication details and a DOI will be added when available.
-
 ## Repository contents
 
 ```text
