@@ -4,7 +4,7 @@
 #   Fig. 4d: KEGG enrichment analysis
 #   Fig. 4e: Immune-suppressive CIIR genes after 24-h KRAS inhibition or 72-h KRAS inhibition
 #   Fig. 4f: Immune-promoting CIIR genes after 24-h KRAS inhibition or 72-h KRAS inhibition
-#   Fig. 4g: 
+#   Fig. 4g: Correlations between CIIR gene expression and xCell immune scores in TCGA and CPTAC-3 KRAS-mutant LUAD
 setwd('path/to/data')
 # ==============================================================================
 # Part 1. Identify shared immune-associated genes
