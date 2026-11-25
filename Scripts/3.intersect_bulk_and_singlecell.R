@@ -2,11 +2,9 @@
 #   Fig. 4b: Bulk RNA-seq expression heatmap
 #   Fig. 4c: Single-cell expression heatmap
 #   Fig. 4d: KEGG enrichment analysis
-#   Fig. 4e: Immune-suppressive CIIR genes after 24-h KRAS inhibition
-#   Fig. 4f: Immune-suppressive CIIR genes after 72-h KRAS inhibition
-#   Fig. 4g: Immune-promoting CIIR genes after 24-h KRAS inhibition
-#   Fig. 4h: Immune-promoting CIIR genes after 72-h KRAS inhibition
-
+#   Fig. 4e: Immune-suppressive CIIR genes after 24-h KRAS inhibition or 72-h KRAS inhibition
+#   Fig. 4f: Immune-promoting CIIR genes after 24-h KRAS inhibition or 72-h KRAS inhibition
+#   Fig. 4g: 
 setwd('path/to/data')
 # ==============================================================================
 # Part 1. Identify shared immune-associated genes
@@ -459,7 +457,7 @@ plot_log2FC_single <- function(data,
   
   return(p)
 }
-########Fig4g#####
+########Fig4e-f#####
 p1 <- plot_log2FC_single(
   h358_24h_genes,
   group_to_plot = "promoting",
@@ -467,7 +465,6 @@ p1 <- plot_log2FC_single(
   fill_color = "grey80",
   border_color = "black"
 )
-########Fig4e#####
 p2 <- plot_log2FC_single(
   h358_24h_genes,
   group_to_plot = "suppressive",
@@ -476,8 +473,6 @@ p2 <- plot_log2FC_single(
   fill_color = "grey80",
   border_color = "black"
 )
-
-########Fig4h#####
 p3 <- plot_log2FC_single(
   h358_72h_genes,
   group_to_plot = "promoting",
@@ -485,7 +480,6 @@ p3 <- plot_log2FC_single(
   fill_color = "grey80",
   border_color = "black"
 )
-########Fig4f#####
 p4 <- plot_log2FC_single(
   h358_72h_genes,
   group_to_plot = "suppressive",
@@ -495,3 +489,422 @@ p4 <- plot_log2FC_single(
   border_color = "black"
 )
 grid.arrange(p2,p4,p1,p3,ncol=4,widths=c(4,2,2,1.5))
+
+####################################################################
+###################Fig4g and supplementary figure 3-4#########
+# 1. gene groups
+# Genes shared by the two studies
+genes_suppressive_both <- c("PDE4D", "KCNF1", "DEPDC1")
+genes_promoting_both <- c("CYP1B1", "MMP7", "CX3CL1", "PLAT")
+
+# 2. Analysis and plotting helpers ----
+# Expression: genes x samples. TIMER2: cell_type column followed by sample columns.
+get_gene_vs_all_celltypes <- function(exp_mat, cell_mat, gene_name) {
+  if (!(gene_name %in% rownames(exp_mat))) {
+    stop("gene not found")
+  }
+  
+  gene_vec <- as.numeric(exp_mat[gene_name, ])
+  names(gene_vec) <- colnames(exp_mat)
+  
+  res_list <- lapply(seq_len(nrow(cell_mat)), function(i) {
+    cell_name <- cell_mat$cell_type[i]
+    cell_vec <- as.numeric(cell_mat[i, -1])
+    names(cell_vec) <- colnames(cell_mat)[-1]
+    
+    common_samples <- intersect(names(gene_vec), names(cell_vec))
+    gene_use <- gene_vec[common_samples]
+    cell_use <- cell_vec[common_samples]
+    
+    keep <- complete.cases(gene_use, cell_use)
+    gene_use <- gene_use[keep]
+    cell_use <- cell_use[keep]
+    
+    # Skip tests with fewer than three complete pairs or no variation.
+    if (length(gene_use) < 3 || length(unique(gene_use)) < 2 || length(unique(cell_use)) < 2) {
+      return(data.frame(
+        gene = gene_name,
+        cell_type = cell_name,
+        cor = NA,
+        pvalue = NA,
+        direction = NA,
+        n = length(gene_use)
+      ))
+    }
+    
+    cor_res <- cor.test(gene_use, cell_use, method = "spearman")
+    cor_val <- unname(cor_res$estimate)
+    
+    data.frame(
+      gene = gene_name,
+      cell_type = cell_name,
+      cor = cor_val,
+      pvalue = cor_res$p.value,
+      direction = ifelse(cor_val > 0, "positive", "negative"),
+      n = length(gene_use)
+    )
+  })
+  
+  # Apply BH correction across all TIMER2 indicators within each gene.
+  res_df <- bind_rows(res_list) %>%
+    mutate(
+      padj = p.adjust(pvalue, method = "BH")
+    ) %>%
+    arrange(pvalue)
+  
+  return(res_df)
+}
+
+# Heatmaps retain cell types with valid correlations from at least two methods.
+get_timer2_gene_analysis <- function(gene_name, exp_mat, cell_mat,
+                                    direction_name) {
+  if (!(gene_name %in% rownames(exp_mat))) {
+    warning(sprintf("Skipping %s: gene not found in kras_exp.", gene_name))
+    return(NULL)
+  }
+
+  res <- get_gene_vs_all_celltypes(
+    exp_mat = exp_mat,
+    cell_mat = cell_mat,
+    gene_name = gene_name
+  )
+
+  res_plot <- res %>%
+    mutate(
+      cell_type_main = str_remove(cell_type, "_[^_]+$"),
+      method = str_extract(cell_type, "[^_]+$"),
+      cor = ifelse(is.infinite(cor), NA, cor)
+    ) %>%
+    group_by(cell_type_main) %>%
+    mutate(
+      n_tool_valid = n_distinct(method[!is.na(cor)])
+    ) %>%
+    ungroup()
+
+  res_plot_filter <- res_plot %>%
+    filter(n_tool_valid > 1)
+
+  if (nrow(res_plot_filter) == 0) {
+    warning(sprintf("No cell types with at least two valid methods for %s.", gene_name))
+    return(list(res = res, plot_df = NULL, p = NULL))
+  }
+
+  # Order by decreasing number of negative methods, then increasing mean correlation.
+  cell_order <- res_plot_filter %>%
+    group_by(cell_type_main) %>%
+    summarise(
+      n_neg_method = n_distinct(method[!is.na(cor) & cor < 0]),
+      mean_cor = mean(cor, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(n_neg_method), mean_cor) %>%
+    pull(cell_type_main)
+
+  # Heatmap stars use raw P < 0.05; bubble sizes use BH-adjusted P.
+  plot_df <- res_plot_filter %>%
+    dplyr::select(cell_type_main, method, cor, pvalue, padj) %>%
+    distinct() %>%
+    complete(cell_type_main, method) %>%
+    mutate(
+      sig_label = case_when(
+        !is.na(pvalue) & pvalue < 0.05 ~ "*",
+        TRUE ~ ""
+      ),
+      cell_type_main = factor(cell_type_main, levels = cell_order)
+    )
+
+  p <- ggplot(plot_df, aes(x = cell_type_main, y = method, fill = cor)) +
+    geom_tile(color = "white", linewidth = 0.4) +
+    geom_text(aes(label = sig_label), size = 4) +
+    scale_fill_gradient2(
+      low = "#2166AC", mid = "white", high = "#B2182B",
+      midpoint = 0, na.value = "grey80", name = "Spearman\ncorrelation"
+    ) +
+    labs(
+      title = gene_name,
+      subtitle = paste(direction_name, "Both studies", sep = " | "),
+      x = NULL, y = NULL
+    ) +
+    theme_bw(base_size = 11) +
+    theme(
+      panel.grid = element_blank(),
+      axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+      axis.text.y = element_text(size = 9),
+      legend.title = element_text(size = 9),
+      legend.text = element_text(size = 8)
+    )
+
+  list(res = res, plot_df = plot_df, p = p)
+}
+
+# Arrange the gene heatmaps within each group.
+arrange_timer2_group <- function(plots, ncol = 2, title = NULL) {
+  plots <- Filter(Negate(is.null), plots)
+  if (length(plots) == 0) {
+    message("No plots to arrange: ", title)
+    return(NULL)
+  }
+  gridExtra::grid.arrange(
+    grobs = plots,
+    ncol = min(ncol, length(plots)),
+    top = title
+  )
+}
+
+# Match linked IDs as sets (A;B = B;A), keeping each RNA column as one sample.
+normalize_cptac_sample_ids <- function(ids) {
+  if (anyNA(ids) || any(!nzchar(trimws(ids)))) {
+    stop("Missing CPTAC sample identifiers.")
+  }
+  vapply(strsplit(ids, ";", fixed = TRUE), function(x) {
+    paste(sort(unique(trimws(x))), collapse = ";")
+  }, character(1), USE.NAMES = FALSE)
+}
+timer2_gene_groups <- list(
+  suppressive = list(both = genes_suppressive_both),
+  promoting = list(both = genes_promoting_both)
+)
+# Shared cohort workflow; results are indexed by $direction$both$gene.
+analyse_timer2_both <- function(exp_mat, cell_mat, cohort = NULL) {
+  results <- lapply(names(timer2_gene_groups), function(direction_name) {
+    genes <- timer2_gene_groups[[direction_name]]$both
+    direction_label <- if (is.null(cohort)) direction_name else
+      paste(cohort, direction_name, sep = " | ")
+    gene_results <- lapply(genes, function(gene_name) {
+      get_timer2_gene_analysis(gene_name, exp_mat, cell_mat, direction_label)
+    })
+    list(both = setNames(gene_results, genes))
+  })
+  setNames(results, names(timer2_gene_groups))
+}
+
+cptac_analysis_genes <- unique(c(genes_suppressive_both, genes_promoting_both))
+
+# 3. TCGA inputs and shared-gene heatmaps ----
+load(paste0(WORK_DIR,'Rdata/kras_tpm138.RData'))
+kras_tpm<-kras_tpm138[!duplicated(kras_tpm138$gene_name),]
+kras_tpm_coding<-kras_tpm[which(kras_tpm$genetype=='protein_coding'),]
+rownames(kras_tpm_coding)<-kras_tpm_coding$gene_name
+kras_exp<-kras_tpm_coding[,-c(1,2)]
+
+matrix<-read.csv(paste0(WORK_DIR,'Results/TIMER2_estimation_matrix_KRAStpm.csv'))
+colnames(matrix) <- gsub("\\.", "-", colnames(matrix))
+
+timer2_results <- analyse_timer2_both(kras_exp, matrix)
+
+p_list <- lapply(timer2_results, function(group) {
+  list(both = lapply(group$both, function(result) result$p))
+})
+
+p_group <- list(suppressive = list(), promoting = list())
+
+p_group$promoting$both <- arrange_timer2_group(p_list$promoting$both, ncol = 1, title = "both promoting")
+p_group$suppressive$both <- arrange_timer2_group(p_list$suppressive$both, ncol = 1, title = "both suppressive")
+
+# 4. Optional CPTAC TPM preparation ----
+# GDC: https://portal.gdc.cancer.gov/analysis_page?app=CohortBuilder&tab=genomic_filters
+# Select CPTAC-3, bronchus and lung, and adenomas and adenocarcinomas; download masked somatic mutations.
+# Original selection: 236 cases; 113 matched the manifest, including 68 cases with nonsynonymous KRAS mutations (69 MAF files).
+
+# load(file=paste0(WORK_DIR,'Rdata/exp_tpm_cptac.RData'))
+# kras_cptac<-read.csv(paste0(WORK_DIR,'Tables/KRAS_mutant_RNA_samples_cptac.csv'),
+#                      check.names = FALSE, stringsAsFactors = FALSE)
+# 
+# cptac_tpm_columns <- setdiff(colnames(exp_tpm), c("genetype", "gene_name"))
+# cptac_tpm_keys <- normalize_cptac_sample_ids(cptac_tpm_columns)
+# kras_cptac_keys <- normalize_cptac_sample_ids(kras_cptac$sample_submitter_ids)
+# if (anyDuplicated(cptac_tpm_keys) || anyDuplicated(kras_cptac_keys) ||
+#     anyDuplicated(kras_cptac$case_submitter_id)) {
+#   stop("Duplicate CPTAC sample sets or cases; review before extracting TPM.")
+# }
+# cptac_match <- match(kras_cptac_keys, cptac_tpm_keys)
+# if (anyNA(cptac_match)) {
+#   stop(paste("CPTAC KRAS samples missing from TPM:",
+#              paste(kras_cptac$sample_submitter_ids[is.na(cptac_match)], collapse = ", ")))
+# }
+# 
+# # Preserve mutation-table order; each case has one RNA file and is labeled by case ID.
+# kras_cptac_sample_map <- kras_cptac
+# kras_cptac_sample_map$tpm_source_column <- cptac_tpm_columns[cptac_match]
+# kras_cptac_sample_map$tpm_output_column <- kras_cptac$case_submitter_id
+# stopifnot(
+#   all(kras_cptac_sample_map$sample_types == "Primary Tumor"),
+#   all(kras_cptac_sample_map$KRAS_status_linked_sample ==
+#         "KRAS_nonsynonymous_in_linked_MAF"),
+#   all(vapply(exp_tpm[kras_cptac_sample_map$tpm_source_column], is.numeric, logical(1)))
+# )
+# 
+# cptac_gene_names <- trimws(as.character(exp_tpm$gene_name))
+# cptac_named_gene <- !is.na(cptac_gene_names) & nzchar(cptac_gene_names)
+# cptac_coding_gene <- cptac_named_gene & !is.na(exp_tpm$genetype) &
+#   exp_tpm$genetype == "protein_coding"
+# 
+# # Keep the first protein-coding row per symbol, retaining untransformed TPM.
+# cptac_keep_gene <- cptac_coding_gene
+# cptac_keep_gene[cptac_coding_gene] <-
+#   !duplicated(cptac_gene_names[cptac_coding_gene])
+# cptac_selected_tpm <- as.matrix(
+#   exp_tpm[cptac_keep_gene, kras_cptac_sample_map$tpm_source_column, drop = FALSE]
+# )
+# stopifnot(all(is.finite(cptac_selected_tpm)), all(cptac_selected_tpm >= 0))
+# 
+# kras_tpm_cptac <- cptac_selected_tpm
+# rownames(kras_tpm_cptac) <- cptac_gene_names[cptac_keep_gene]
+# colnames(kras_tpm_cptac) <- kras_cptac_sample_map$tpm_output_column
+# stopifnot(
+#   !anyDuplicated(rownames(kras_tpm_cptac)),
+#   identical(colnames(kras_tpm_cptac), kras_cptac$case_submitter_id),
+#   isTRUE(all.equal(unname(colSums(kras_tpm_cptac)),
+#                    unname(colSums(cptac_selected_tpm))))
+# )
+# 
+# save(kras_tpm_cptac, kras_cptac_sample_map,
+#      file = file.path(WORK_DIR, "Rdata/kras_tpm_cptac_TIMER2.RData"))
+# 
+# # Export TIMER2 input: gene symbols followed by sample TPM columns.
+# write.table(data.frame(gene = rownames(kras_tpm_cptac), kras_tpm_cptac,
+#                        check.names = FALSE),
+#             file.path(WORK_DIR, "Results/TIMER2_CPTAC_KRAS_mutant_TPM.tsv"),
+#             sep = "\t", quote = FALSE, row.names = FALSE)
+# 5. CPTAC inputs and shared-gene heatmaps ----
+load(file = file.path(WORK_DIR, "Rdata/kras_tpm_cptac_TIMER2.RData"))
+cptac_matrix<-read.csv(paste0(WORK_DIR,'Results/TIMER2_CPTAC_KRAS_LUAD_estimation_matrix.csv'),
+                       check.names = FALSE, stringsAsFactors = FALSE)
+
+# Preserve sample IDs and align TIMER2 columns to the expression matrix.
+if (!identical(names(cptac_matrix)[1], "cell_type") ||
+    anyDuplicated(names(cptac_matrix)[-1]) || anyDuplicated(cptac_matrix$cell_type)) {
+  stop("Invalid or duplicated CPTAC TIMER2 sample/cell-type identifiers.")
+}
+cptac_missing_samples <- setdiff(colnames(kras_tpm_cptac), names(cptac_matrix)[-1])
+cptac_extra_samples <- setdiff(names(cptac_matrix)[-1], colnames(kras_tpm_cptac))
+if (length(cptac_missing_samples) || length(cptac_extra_samples)) {
+  stop(paste("CPTAC TPM/TIMER2 sample mismatch. Missing:",
+             paste(cptac_missing_samples, collapse = ", "), "Extra:",
+             paste(cptac_extra_samples, collapse = ", ")))
+}
+cptac_matrix <- cptac_matrix[, c("cell_type", colnames(kras_tpm_cptac)), drop = FALSE]
+stopifnot(
+  identical(names(cptac_matrix)[-1], colnames(kras_tpm_cptac)),
+  all(vapply(cptac_matrix[-1], is.numeric, logical(1))),
+  all(is.finite(as.matrix(cptac_matrix[-1])))
+)
+cptac_missing_genes <- setdiff(cptac_analysis_genes, rownames(kras_tpm_cptac))
+if (length(cptac_missing_genes)) {
+  stop(paste("Genes missing from CPTAC TPM:", paste(cptac_missing_genes, collapse = ", ")))
+}
+
+timer2_results_cptac <- analyse_timer2_both(kras_tpm_cptac, cptac_matrix, cohort = "CPTAC")
+
+p_list_cptac <- lapply(timer2_results_cptac, function(group) {
+  list(both = lapply(group$both, function(result) result$p))
+})
+p_group_cptac <- list(suppressive = list(), promoting = list())
+p_group_cptac$promoting$both <- arrange_timer2_group(p_list_cptac$promoting$both, ncol = 1, title = "CPTAC | both promoting")
+p_group_cptac$suppressive$both <- arrange_timer2_group(p_list_cptac$suppressive$both, ncol = 1, title = "CPTAC | both suppressive")
+
+# 6. xCell immune score analysis and bubble plots for all 65 genes ----
+# Use source-table groups: negative -> suppressive; positive -> promoting.
+immune65_gene_table <- read.csv(
+  file.path(WORK_DIR, "Results/fig4.overlap_65_genes_of_bulk_and_sc.csv"),
+  check.names = FALSE, stringsAsFactors = FALSE
+)
+stopifnot(!anyDuplicated(immune65_gene_table$gene_name),
+          all(immune65_gene_table$immune %in% c("negative", "positive")))
+immune65_gene_table <- immune65_gene_table %>%
+  transmute(gene = gene_name,
+            immune_group = factor(ifelse(immune == "negative", "suppressive", "promoting"),
+                                  levels = c("promoting", "suppressive"))) %>%
+  arrange(immune_group)
+immune65_gene_order <- immune65_gene_table$gene
+immune65_cohorts <- list(
+  TCGA = list(exp = kras_exp, cells = matrix),
+  CPTAC = list(exp = kras_tpm_cptac, cells = cptac_matrix)
+)
+immune65_results <- bind_rows(lapply(names(immune65_cohorts), function(cohort_name) {
+  cohort_data <- immune65_cohorts[[cohort_name]]
+  missing_genes <- setdiff(immune65_gene_order, rownames(cohort_data$exp))
+  if (length(missing_genes)) {
+    stop(paste(cohort_name, "missing genes:", paste(missing_genes, collapse = ", ")))
+  }
+  stopifnot(sum(cohort_data$cells$cell_type == "immune score_XCELL") == 1L,
+            setequal(colnames(cohort_data$exp), names(cohort_data$cells)[-1]))
+  # Test and adjust across all TIMER2 indicators before extracting xCell; ignore input-table padj.
+  withCallingHandlers(
+    bind_rows(lapply(immune65_gene_order, function(gene_name) {
+      get_gene_vs_all_celltypes(cohort_data$exp, cohort_data$cells, gene_name) %>%
+        filter(cell_type == "immune score_XCELL") %>%
+        transmute(gene, cohort = cohort_name, cell_type, rho = cor, pvalue, padj, n)
+    })),
+    warning = function(w) {
+      if (grepl("Cannot compute exact p-value with ties", conditionMessage(w), fixed = TRUE)) {
+        invokeRestart("muffleWarning")
+      }
+    }
+  )
+})) %>%
+  left_join(immune65_gene_table, by = "gene") %>%
+  mutate(gene = factor(gene, levels = immune65_gene_order),
+         cohort = factor(cohort, levels = c("TCGA", "CPTAC")),
+         neg_log10_padj = -log10(pmax(padj, .Machine$double.xmin)))
+stopifnot(nrow(immune65_results) == 2L * nrow(immune65_gene_table),
+          !anyDuplicated(immune65_results[c("gene", "cohort")]))
+
+# Use common axis, color, and size scales across cohorts.
+immune65_rho_limit <- max(0.1, ceiling(max(abs(immune65_results$rho), na.rm = TRUE) * 10) / 10)
+immune65_size_limit <- max(immune65_results$neg_log10_padj, na.rm = TRUE)
+p_immune65_base <- ggplot(immune65_results, aes(x = gene, y = rho)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey65", linewidth = 0.4) +
+  geom_point(aes(fill = rho, size = neg_log10_padj),
+             shape = 21, color = "grey35", stroke = 0.35, na.rm = TRUE) +
+  scale_fill_gradient2(low = "#2166AC", mid = "white", high = "#B2182B",
+                       midpoint = 0, limits = c(-1, 1), name = "Spearman rho") +
+  scale_size_continuous(range = c(1.6, 7.5), limits = c(0, immune65_size_limit),
+                        name = expression(-log[10](P[adj]))) +
+  scale_y_continuous(limits = c(-immune65_rho_limit, immune65_rho_limit),
+                     labels = scales::label_number(accuracy = 0.1),
+                     expand = expansion(mult = 0.08)) +
+  facet_grid(. ~ immune_group, scales = "free_x", space = "free_x") +
+  labs(x = NULL, y = "Spearman rho") +
+  guides(size = guide_legend(override.aes = list(fill = "white"))) +
+  theme_bw(base_size = 11) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1, vjust = 1, size = 9),
+        panel.grid.minor = element_blank(), panel.grid.major.x = element_blank(),
+        strip.text = element_text(face = "bold", size = 11),
+        legend.position = "right", plot.title = element_text(face = "bold"),
+        plot.caption = element_text(hjust = 0, size = 8, color = "grey40"))
+
+# Default order: increasing adjusted P within each cohort and group.
+immune65_tcga_plot_data <- immune65_results %>%
+  filter(cohort == "TCGA") %>%
+  arrange(immune_group, padj, as.character(gene)) %>%
+  mutate(gene = factor(as.character(gene), levels = as.character(gene)))
+immune65_cptac_plot_data <- immune65_results %>%
+  filter(cohort == "CPTAC") %>%
+  arrange(immune_group, padj, as.character(gene)) %>%
+  mutate(gene = factor(as.character(gene), levels = as.character(gene)))
+
+p_tcga <- p_immune65_base %+% immune65_tcga_plot_data +
+  labs(title = "Expression vs immune score_xCell TCGA (n = 138)")
+p_cpatc <- p_immune65_base %+% immune65_cptac_plot_data +
+  labs(title = "Expression vs immune score_xCell CPTAC (n = 68)")
+
+# Combined plot: shared genes first within each cohort/group, then the remaining genes.
+# Sort each block by rho: decreasing for promoting, increasing for suppressive.
+immune65_both_first_rho_results <- immune65_results %>%
+  mutate(both_studies_first = as.character(gene) %in% c(genes_suppressive_both, genes_promoting_both),
+         rho_sort = ifelse(immune_group == "promoting", -rho, rho)) %>%
+  arrange(cohort, immune_group, desc(both_studies_first), rho_sort, padj, as.character(gene))
+immune65_tcga_both_first_rho_data <- immune65_both_first_rho_results %>%
+  filter(cohort == "TCGA") %>%
+  mutate(gene = factor(as.character(gene), levels = as.character(gene)))
+immune65_cptac_both_first_rho_data <- immune65_both_first_rho_results %>%
+  filter(cohort == "CPTAC") %>%
+  mutate(gene = factor(as.character(gene), levels = as.character(gene)))
+
+p_tcga_both_first_rho <- p_tcga %+% immune65_tcga_both_first_rho_data
+p_cpatc_both_first_rho <- p_cpatc %+% immune65_cptac_both_first_rho_data
+p_tcga_cptac_both_first_rho <- patchwork::wrap_plots(
+  p_tcga_both_first_rho, p_cpatc_both_first_rho, ncol = 1, guides = "collect"
+) & theme(legend.position = "right")
+p_tcga_cptac_both_first_rho
