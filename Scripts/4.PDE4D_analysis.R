@@ -431,11 +431,6 @@ immune_res_tcga_sorted <- immune_res_tcga %>%
   arrange(logqvalue, desc(Description)) %>%  # Use descending order for Description
   # Convert immunecell to a factor to preserve the sorted plotting order
   mutate(immunecell = factor(immunecell, levels = unique(immunecell)))
-# Supplementary Figure 4c: ImmuCellAI GSEA
-p_immucellAI<-ggplot(immune_res_tcga_sorted,aes(x=logqvalue,y=immunecell,size=abs(NES),colour=annotation))+
-  scale_color_manual(values=c("blue","red"))+
-  geom_point(shape=16)+labs(x='-log10(qvalue)',y='Immune cells',title = 'PDE4D high vs PDE4D low (KRAS-mut LUAD)')+
-  theme_set(theme_bw())+theme(axis.title = element_text(size=13),axis.title.x = element_text(size=13),legend.title = element_text(size=9))
 
 # CIBERSORT immune-cell analysis
 immuneSig<-read.csv(paste0(WORK_DIR,'Tables/CIBERSORT_cell_types_markers.csv'))
@@ -456,13 +451,6 @@ immune_res_tcga_sorted_cibersort <- immune_res_tcga_cibersort %>%
   arrange(logqvalue, desc(Description)) %>%  # Use descending order for Description
   # Convert immunecell to a factor to preserve the sorted plotting order
   mutate(immunecell = factor(immunecell, levels = unique(immunecell)))
-# Supplementary Figure 4b: CIBERSORT GSEA
-p_cibersort<-ggplot(immune_res_tcga_sorted_cibersort,aes(x=logqvalue,y=immunecell,size=abs(NES),colour=annotation))+
-  scale_color_manual(values=c("blue","red"))+
-  geom_point(shape=16)+labs(x='-log10(qvalue)',y='Immune cells cibersort',title = 'PDE4D high vs PDE4D low (KRAS-mut LUAD)')+
-  theme_set(theme_bw())+theme(axis.title = element_text(size=13),axis.title.x = element_text(size=13),legend.title = element_text(size=9))
-
-
 
 # TIMER2 immune-cell estimation
 load(paste0(WORK_DIR,'Rdata/kras_tpm138.RData'))
@@ -704,32 +692,7 @@ plot_df <- res_PDE4D_plot_filter %>%
     )
   )
 
-# Supplementary Figure 4a: cross-method correlation heatmap
-p <- ggplot(plot_df, aes(x = cell_type_main, y = method, fill = cor)) +
-  geom_tile(color = "white", linewidth = 0.4) +
-  geom_text(aes(label = sig_label), size = 4) +
-  scale_fill_gradient2(
-    low = "#2166AC",
-    mid = "white",
-    high = "#B2182B",
-    midpoint = 0,
-    na.value = "grey80",
-    name = "Spearman\ncorrelation"
-  ) +
-  labs(
-    x = NULL,
-    y = NULL
-  ) +
-  theme_bw(base_size = 11) +
-  theme(
-    panel.grid = element_blank(),
-    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
-    axis.text.y = element_text(size = 9),
-    legend.title = element_text(size = 9),
-    legend.text = element_text(size = 8)
-  )
 
-p
 # Optional alternative summary method
 # res_PDE4D_focus <- extract_supported_celltypes(res_PDE4D)
 library(tidyverse)
@@ -878,7 +841,6 @@ kras_exp<-read.csv(file=paste0(WORK_DIR,'Results/kras_exp.csv'),row.names = 1)
 # ============================================================================
 # PART 4 — FIGURE 5: IMMUNE CORRELATIONS AND CCLE FUNCTIONAL ANALYSES
 # ============================================================================
-# Figure 5a: PDE4D expression versus immune score
 res_plot_immune <- plot_gene_celltype_cor(
   exp_mat = kras_exp,
   cell_mat = matrix,
@@ -888,7 +850,7 @@ res_plot_immune <- plot_gene_celltype_cor(
 )
 res_plot_immune$plot
 
-# Figure 5b: selected TIMER2 immune-cell correlations
+# Figure 5a: selected TIMER2 immune-cell correlations
 load(file=paste0(WORK_DIR,"/Rdata/timer2_spearman_cor_plot_df.Rdata"))
 plot_df<-timer2_spearman_cor_plot_df[which(timer2_spearman_cor_plot_df$cell_type_main %in% c("T cell CD8+","Myeloid dendritic cell","Macrophage")),]
 plot_df$cell_type_main<-factor(plot_df$cell_type_main,levels = c("T cell CD8+", "Myeloid dendritic cell", "Macrophage"))
@@ -1138,39 +1100,39 @@ p_gsea <- ggplot() +
   )
 
 p_gsea
-# Assemble Figure 5b
+# Assemble Figure 5a
 p_final_gsea <- p + p_pval + p_gsea +
   plot_layout(widths = c(1.5, 1, 1.25))
 p_final_gsea
 
-# Figures 5c–d: CCLE KEGG and cytokine analyses
-load(file=paste0(WORK_DIR,'Rdata/kegg_res_ccle_PDE4D.RData'))
+# Figures 5b
+load(file=paste0(WORK_DIR,'Rdata/kegg_res_tcga_PDE4D.RData'))
 
 # Alternative input: kegg_res_ccle <- read.xlsx("Results/DEGs_enrichkegg_res_ccle_PDE4D.xlsx",colTypes = "text")
-kegg_res_ccle1 <- lapply(kegg_res_ccle, function(df) {
+kegg_res_tcga1 <- lapply(kegg_res_tcga, function(df) {
   rownames(df) <-seq(1:nrow(df)) 
   df
 })
-kegg_v_ccle<-rbind(kegg_res_ccle1$DEG_up[c(1:6),],kegg_res_ccle1$DEG_down[c(1:5),])
-# Figure 5c: KEGG enrichment dot plot
-p_kegg_ccle<-ggplot(kegg_v_ccle, aes(x = GeneRatio, 
-                                y = reorder(Description, -log10(pvalue)), 
-                                size = Count, 
-                                color = p.adjust)) +
-  geom_point() +
-  scale_color_gradient(low = "red", high = "blue") +
-  facet_grid(Group ~ ., scales = "free", space = "free") +  # Arrange groups vertically
-  labs(title = "DepMap KRAS-mutant LUAD cell lines: PDE4D-high vs PDE4D-low",
-       x = "Gene Ratio", y = "KEGG pathways", color = "p.adjust") +
-  theme_bw() +
-  theme(strip.text.y = element_text(size=10, face="bold"),
-        axis.text.y = element_text(size=10),
-        axis.text.x = element_text(size=5),
-        plot.title = element_text(hjust=0.5, size=10),
-        legend.title = element_text(size=8),
-        legend.text = element_text(size=8))
-p_kegg_ccle
-
+kegg_v<-rbind(kegg_res_tcga1$DEG_up[c(1:5),],kegg_res_tcga1$DEG_down[c(1:5),])
+p_kegg_tcga<-ggplot(kegg_v, aes(x = GeneRatio, 
+                          y = reorder(Description, -log10(pvalue)), 
+                          size = Count, 
+                          color = p.adjust)) +
+    geom_point() +
+    scale_color_gradient(low = "red", high = "blue") +
+    facet_grid(Group ~ ., scales = "free", space = "free") +  # 上下排列
+    labs(title = "KRAS-mutant TCGA-LUAD: PDE4D-high vs PDE4D-low",
+         x = "Gene Ratio", y = "KEGG pathways", color = "p.adjust") +
+    theme_bw() +
+    theme(strip.text.y = element_text(size=10, face="bold"),
+          axis.text.y = element_text(size=10),
+          axis.text.x = element_text(size=5),
+          plot.title = element_text(hjust=0.5, size=10),
+          legend.title = element_text(size=8),
+          legend.text = element_text(size=8))
+p_kegg_tcga
+######Figure 5c
+load(file=paste0(WORK_DIR,'Rdata/kegg_res_ccle_PDE4D.RData'))
 ccle_cytokiness_up<-kegg_res_ccle$DEG_up[which(kegg_res_ccle$DEG_up$ID=="hsa04060"),]
 ccle_cytokiness_down<-kegg_res_ccle$DEG_down[which(kegg_res_ccle$DEG_down$ID=="hsa04060"),]
 
@@ -1331,7 +1293,7 @@ ccle_cytokiness_down_filtered <- filter_kegg_gene_ids(
   ccle_cytokiness_down,
   cytokine_genes_ccle_filtered
 )
-# Figure 5d: cytokine gene heatmap
+# Figure 5c: cytokine gene heatmap
 p_cytokines_ccle_heatmap1 <- plot_cytokines_heatmap_up_down(
   norm_counts = norm_counts,
   samples = samples_ccle,
@@ -1466,9 +1428,9 @@ if (requireNamespace("ggrepel", quietly = TRUE)) {
 p_volcano_ccle
 
 # ============================================================================
-# PART 5 — FIGURE 6: ANTIGEN PRESENTATION AND SIGNALING ACTIVITY
+# PART 5 — FIGURE 5: ANTIGEN PRESENTATION AND SIGNALING ACTIVITY
 # ============================================================================
-# Figure 6e: DESeq2-normalized CCLE expression
+# Figure 5i: DESeq2-normalized CCLE expression
 load(file=paste0(WORK_DIR,'/Rdata/dds_PDE4D_ccle.RData'))
 norm_counts <- counts(dds_ccle, normalized = TRUE)
 coldata<-dds_ccle@colData
@@ -1476,12 +1438,12 @@ res <- results(
   dds_ccle,
   contrast = c("group", "high", "low")
 )
-# Figure 6e: HLA gene expression
+# Figure 5i: HLA gene expression
 p_hla_a<-plot_deseq_gene_boxplot(norm_counts = norm_counts,coldata = coldata,res = res,gene_name = 'HLA.A')
 p_hla_b<-plot_deseq_gene_boxplot(norm_counts = norm_counts,coldata = coldata,res = res,gene_name = 'HLA.B')
 p_hla_c<-plot_deseq_gene_boxplot(norm_counts = norm_counts,coldata = coldata,res = res,gene_name = 'HLA.C')
-# Figure 6f: CREB1 and NLRC5 expression
-p_creb1<-plot_deseq_gene_boxplot(norm_counts = norm_counts,coldata = coldata,res = res,gene_name = 'CREB1')
+# Figure 5l: CREB1 and NLRC5 expression
+#p_creb1<-plot_deseq_gene_boxplot(norm_counts = norm_counts,coldata = coldata,res = res,gene_name = 'CREB1')
 
 p_nlrc5<-plot_deseq_gene_boxplot(norm_counts = norm_counts,coldata = coldata,res = res,gene_name = 'NLRC5')
 
@@ -1524,7 +1486,7 @@ load(file=paste0(WORK_DIR,'Rdata/viper_scores_PDE4D_ccle.RData'))
 p_STAT1<-plot_TF_box(viper_scores_ccle, samples_ccle, tf = "STAT1")
 
 library(gridExtra)
-# Figure 6g: combined CCLE panels
+# Figure 5l: combined CCLE panels
 grid.arrange(p_JAK_STAT_ccle,p_STAT1,p_nlrc5,ncol=3)
 
 
@@ -1580,130 +1542,5 @@ p_STAT1_tf_tcga<-plot_TF_box(viper_scores_tcga, samples_tcga, tf = "STAT1")
 
 grid.arrange(p_hla_a_tcga,p_hla_b_tcga,p_hla_c_tcga,p_JAK_STAT_tcga,p_STAT1_tf_tcga,p_creb1_tcga,ncol=3)
 
-# ============================================================================
-# PART 6 — SUPPLEMENTARY FIGURE 3: cAMP-RELATED EXPRESSION HEATMAPS
-# ============================================================================
-library(tibble)
-library(viridis)
-load(paste0(WORK_DIR,'Rdata/kras_tpm138.RData'))
-# CIIR: cancer-cell-intrinsic immune-related genes in KRAS-mutant LUAD.
-ciir<-read.csv(paste0(WORK_DIR,'/Tables/immune_genes_basical_info.csv'))
-ciir1<-ciir[,c(1,14)]
-ciir_tpm<-kras_tpm138[which(kras_tpm138$gene_name %in% ciir$gene_name),]
-rownames(ciir_tpm)<-ciir_tpm$gene_name
-ciir_tpm1<-ciir_tpm[,-c(1,2)]
-log_tpm <- log2(ciir_tpm1 + 1)
 
-camp_genes<-c("HCAR2","PDE4D","HCAR3","GRIN1","CGA","NPY")
-camp_log_tpm<-log_tpm[which(rownames(log_tpm) %in% camp_genes),]
-
-# Order genes by mean log2(TPM + 1)
-gene_order <- rowMeans(camp_log_tpm, na.rm = TRUE) %>%
-  sort(decreasing = TRUE) %>%
-  names()
-
-plot_long <- camp_log_tpm[gene_order, , drop = FALSE] %>%
-  as.data.frame() %>%
-  rownames_to_column("gene") %>%
-  pivot_longer(
-    cols = -gene,
-    names_to = "sample",
-    values_to = "expression"
-  ) %>%
-  mutate(
-    gene = factor(gene, levels = gene_order)  )
-# Supplementary Figure 3a: TCGA heatmap
-p_camp_tcga<-ggplot(plot_long, aes(x = gene, y = sample, fill = expression)) +
-  geom_tile() +
-  scale_fill_viridis_c(
-    name = "log2(TPM + 1)",
-    option = "viridis"
-  ) +
-  labs(
-    x = NULL,
-    y = "KRAS-mutant TCGA-LUAD tumors",
-    title = NULL
-    # subtitle = paste0(
-    #   length(gene_order),
-    #   " genes ordered by mean log2(TPM + 1)"
-    # )
-  ) +
-  theme_classic(base_size = 12) +
-  theme(
-    axis.text.x = element_text(
-      angle = 90,
-      vjust = 0.5,
-      hjust = 1,
-      color = "black"
-    ),
-    axis.text.y = element_blank(),
-    axis.ticks = element_blank(),
-    axis.line = element_blank(),
-    plot.title = element_text(hjust = 0.5, face = "bold"),
-    plot.subtitle = element_text(hjust = 0.5),
-    legend.position = "right"
-  )
-
-# Prepare CCLE expression data
-samples_ccle<-read.csv(file = paste0(WORK_DIR,'Results/samples_PDE4D_group_cutoff_valley_ccle.csv'))
-rownames(samples_ccle)<-samples_ccle$sample
-
-tpm<-read.csv('path/to/DepMap/OmicsExpressionProteinCodingGenesTPMLogp1.csv')
-colnames(tpm)[1]<-'ModelID'
-colnames(tpm) <- gsub(" ", "", sub("\\.\\.[0-9]+\\.$", "", colnames(tpm)))
-
-tpm_ccle <- tpm[match(samples_ccle$sample, tpm$ModelID), ]
-rownames(tpm_ccle)<-tpm_ccle$ModelID
-tpm_ccle1<-t(tpm_ccle[,-1])
-load(file = paste0(WORK_DIR,'/Rdata/tpm_ccle1.Rdata'))
-
-
-camp_tpm_ccle<-tpm_ccle1[which(rownames(tpm_ccle1) %in% camp_genes),]
-# Order genes by mean log2(TPM + 1)
-gene_order_ccle <- rowMeans(camp_tpm_ccle, na.rm = TRUE) %>%
-  sort(decreasing = TRUE) %>%
-  names()
-
-plot_long_ccle <- camp_tpm_ccle[gene_order_ccle, , drop = FALSE] %>%
-  as.data.frame() %>%
-  rownames_to_column("gene") %>%
-  pivot_longer(
-    cols = -gene,
-    names_to = "sample",
-    values_to = "expression"
-  ) %>%
-  mutate(
-    gene = factor(gene, levels = gene_order_ccle)  )
-# Supplementary Figure 3b: CCLE heatmap
-p_camp_ccle<-ggplot(plot_long_ccle, aes(x = gene, y = sample, fill = expression)) +
-  geom_tile() +
-  scale_fill_viridis_c(
-    name = "log2(TPM + 1)",
-    option = "viridis"
-  ) +
-  labs(
-    x = NULL,
-    y = "DepMap KRAS-mutant LUAD cell lines",
-    title = NULL
-    # subtitle = paste0(
-    #   length(gene_order),
-    #   " genes ordered by mean log2(TPM + 1)"
-    # )
-  ) +
-  theme_classic(base_size = 12) +
-  theme(
-    axis.text.x = element_text(
-      angle = 90,
-      vjust = 0.5,
-      hjust = 1,
-      color = "black"
-    ),
-    axis.text.y = element_blank(),
-    axis.ticks = element_blank(),
-    axis.line = element_blank(),
-    plot.title = element_text(hjust = 0.5, face = "bold"),
-    plot.subtitle = element_text(hjust = 0.5),
-    legend.position = "right"
-  )
-grid.arrange(p_camp_tcga,p_camp_ccle,ncol=2)
 
