@@ -4,8 +4,6 @@ This repository contains the analysis code accompanying a study of cancer-cell-i
 
 The analyses integrate TCGA-LUAD and CPTAC-3 cohort data, public single-cell RNA-sequencing datasets, KRAS-inhibitor perturbation datasets, DepMap cell line data, and tissue immunohistochemistry (IHC) data.
 
-**Publication status:** Manuscript under submission. Publication details and a DOI will be added when available.
-
 ## Repository contents
 
 ```text
